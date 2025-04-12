@@ -21,7 +21,7 @@ int save_bitmap_as_ppm(FT_Bitmap *bitmap, const char* filename) {
 
   for (unsigned int row = 0; row < bitmap->rows; ++row) {
     for (unsigned int col = 0; col < bitmap->width; ++col) {
-      int index = (bitmap->pitch * row) + col;
+      unsigned int index = (unsigned int)(bitmap->pitch * (int)row) + col;
       unsigned char x = *(bitmap->buffer + index);
       // printf("%c\n", x);
       fputc(x, f);
@@ -41,12 +41,14 @@ void slap_bitmap_onto_bitmap(FT_Bitmap *dest, FT_Bitmap *src, int x, int y)
   assert(src);
   assert(src->pixel_mode ==  FT_PIXEL_MODE_GRAY);
 
-  for (unsigned int row = 0;
-       (row < src->rows) && (row + x < dest->rows);
-       ++row) {
-    for (unsigned int col = 0;
-         (col < src->width) && (col + y < dest->width);
-         ++col) {
+  for (int row = 0;
+       (row < (int)src->rows) && (row + x < (int)dest->rows);
+       ++row)
+  {
+    for (int col = 0;
+         (col < (int)src->width) && (col + y < (int)dest->width);
+         ++col)
+    {
       dest->buffer[(row + y) * dest->pitch + col + x] = src->buffer[row * src->pitch + col];
     }
   }
@@ -90,7 +92,7 @@ int main() {
   surface.width = 800;
   surface.pitch = 800;
   surface.rows = 600;
-  surface.buffer = (unsigned char *)malloc(surface.width * surface.pitch);
+  surface.buffer = (unsigned char *)malloc(surface.width * (unsigned int)surface.pitch);
   surface.pixel_mode = FT_PIXEL_MODE_GRAY;
 
   const char *text = "Hello, World";
@@ -100,8 +102,8 @@ int main() {
   for(int i = 0; i < (int) text_count; ++i) {
 
     // * retrieve glyph index from character code
-    FT_UInt glyph_index = FT_Get_Char_Index(face, text[i]);
-  
+    FT_UInt glyph_index = FT_Get_Char_Index(face, (FT_UInt)text[i]);
+
     // * load glyph image into the slot (erase previous one)
     error = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
     if (error) {
