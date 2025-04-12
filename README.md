@@ -1,4 +1,5 @@
 # Vodus
+## Twitch VOD Chat Renderer
 
 ```console
 $ ## Dependencies

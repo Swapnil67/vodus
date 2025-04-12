@@ -5,10 +5,8 @@
 
 #define FACE_FILE_PATH "./Comic-Sans-MS.ttf"
 
-int save_bitmap_as_ppm(FT_Bitmap *bitmap, char prefix_char) {
+int save_bitmap_as_ppm(FT_Bitmap *bitmap, const char* filename) {
   assert(bitmap->pixel_mode ==  FT_PIXEL_MODE_GRAY);
-  char filename[10];
-  snprintf(filename, 10, "%c.ppm", prefix_char);
   FILE *f = fopen(filename, "wb");
   if(!f) {
     return -1;
@@ -34,6 +32,24 @@ int save_bitmap_as_ppm(FT_Bitmap *bitmap, char prefix_char) {
 
   fclose(f);
   return 1;
+}
+
+void slap_bitmap_onto_bitmap(FT_Bitmap *dest, FT_Bitmap *src, int x, int y)
+{
+  assert(dest);
+  assert(dest->pixel_mode ==  FT_PIXEL_MODE_GRAY);
+  assert(src);
+  assert(src->pixel_mode ==  FT_PIXEL_MODE_GRAY);
+
+  for (unsigned int row = 0;
+       (row < src->rows) && (row + x < dest->rows);
+       ++row) {
+    for (unsigned int col = 0;
+         (col < src->width) && (col + y < dest->width);
+         ++col) {
+      dest->buffer[(row + y) * dest->pitch + col + x] = src->buffer[row * src->pitch + col];
+    }
+  }
 }
 
 int main() {
@@ -68,30 +84,62 @@ int main() {
     exit(1);
   }
 
-  const char *text = "a";
-  while(*text != '\0') {
-    auto glyph_index = FT_Get_Char_Index(face, *text);
-    error = FT_Load_Glyph(face, glyph_index, 0);
+  FT_GlyphSlot  slot = face->glyph;  /* a small shortcut */
+
+  FT_Bitmap surface;
+  surface.width = 800;
+  surface.pitch = 800;
+  surface.rows = 600;
+  surface.buffer = (unsigned char *)malloc(surface.width * surface.pitch);
+  surface.pixel_mode = FT_PIXEL_MODE_GRAY;
+
+  const char *text = "Hello, World";
+  size_t text_count = strlen(text);  
+
+  int pen_x = 0, pen_y = 100;
+  for(int i = 0; i < (int) text_count; ++i) {
+
+    // * retrieve glyph index from character code
+    FT_UInt glyph_index = FT_Get_Char_Index(face, text[i]);
+  
+    // * load glyph image into the slot (erase previous one)
+    error = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
     if (error) {
-      fprintf(stderr, "could not load glyph for %c\n", *text);
+      fprintf(stderr, "could not load glyph for %c\n", text[i]);
       exit(1);
     }
+
+    // * convert to an anti-aliased bitmap
     error = FT_Render_Glyph(face->glyph,            /* glyph slot  */
                             FT_RENDER_MODE_NORMAL); /* render mode */
     if (error) {
-      fprintf(stderr, "could not render glyph for %c\n", *text);
+      fprintf(stderr, "could not render glyph for %c\n", text[i]);
       exit(1);
     }
-    printf("\t'%c'\n", *text);
-    printf("\t\tglyph_index: %u\n",glyph_index);
-    printf("\t\trows: %u\n", face->glyph->bitmap.rows);
-    printf("\t\twidth: %u\n", face->glyph->bitmap.width);
-    printf("\t\tpitch: %u\n", face->glyph->bitmap.pitch);
-    printf("\t\tpixel_mode: %u\n", face->glyph->bitmap.pixel_mode);
 
-    save_bitmap_as_ppm(&face->glyph->bitmap, *text);
-    text++;
+    // * load glyph image into the slot (erase previous one)
+    // error = FT_Load_Char(face, text[i], FT_LOAD_RENDER);
+    // if (error) {
+    //   fprintf(stderr, "Error during rendering character %c\n", text[i]);
+    //   exit(1);
+    // }
+
+    printf("\t'%c'\n", text[i]);
+    printf("\t\trows: %u\n", slot->bitmap.rows);
+    printf("\t\twidth: %u\n", slot->bitmap.width);
+    printf("\t\tpitch: %u\n", slot->bitmap.pitch);
+    printf("\t\tpixel_mode: %u\n", slot->bitmap.pixel_mode);
+
+    slap_bitmap_onto_bitmap(&surface,
+                            &face->glyph->bitmap,
+                            pen_x + slot->bitmap_left,
+                            pen_y - slot->bitmap_top);
+
+    //* increment pen position
+    pen_x += slot->advance.x >> 6;
+
+    save_bitmap_as_ppm(&surface, "output.ppm");
   }
-
+  
   return 0;
 }
