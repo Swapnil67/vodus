@@ -1,1 +1,7 @@
 vodus
+*.dSYM
+.vscode
+.DS_Store
+Comic-Sans-MS.ttf
+
+*.ppm
