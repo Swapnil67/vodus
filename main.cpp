@@ -183,7 +183,7 @@ int main() {
   Image32 surface;
   surface.width = 800;
   surface.height = 600;
-  surface.pixels = (Pixels32 *)malloc(surface.width * surface.height * sizeof(Pixels32));
+  surface.pixels = (Pixels32 *)malloc((unsigned long)surface.width * (unsigned long)surface.height * sizeof(Pixels32));
   assert(surface.pixels);
 
   const char *text = "Hello, World";
