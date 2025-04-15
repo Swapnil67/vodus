@@ -17,6 +17,21 @@ struct Image32 {
   Pixels32 *pixels;
 };
 
+int save_image32_as_png(Image32 *image32, const char *filename) {
+  png_image pimage;
+  memset(&pimage, 0, sizeof(png_image));
+  pimage.opaque = NULL;
+  pimage.width = image32->width;
+  pimage.height = image32->height;
+  pimage.version = PNG_IMAGE_VERSION; 
+  pimage.format = PNG_FORMAT_RGBA;
+
+  int convert_to_8bit = 0;
+  png_image_write_to_file(&pimage, filename, convert_to_8bit, image32->pixels, 0, nullptr);
+
+  return 0;
+}
+
 int save_image32_as_ppm(Image32 *image, const char* filename) {
   FILE *f = fopen(filename, "wb");
   if(!f) {
@@ -58,6 +73,14 @@ void slap_onto_image32(Image32 *dest, Image32 *src, int x, int y) {
     {
       dest->pixels[(row + y) * dest->width + col + x] = src->pixels[row * src->width + col];
     }
+  }
+}
+
+void fill_image32_with_color(Image32 *image, Pixels32 color)
+{
+  int n = image->height * image->width;
+  for(int i = 0; i < n ;++i) {
+    image->pixels[i] = color;
   }
 }
 
@@ -239,8 +262,9 @@ int main(int argc, char *argv[]) {
   surface.height = 600;
   surface.pixels = (Pixels32 *)malloc((unsigned long)surface.width * (unsigned long)surface.height * sizeof(Pixels32));
   assert(surface.pixels);
+  fill_image32_with_color(&surface, {0, 0, 0, 255});
 
-  size_t text_count = strlen(text);  
+      size_t text_count = strlen(text);
 
   int pen_x = 0, pen_y = 50;
   for(int i = 0; i < (int) text_count; ++i) {
@@ -292,9 +316,8 @@ int main(int argc, char *argv[]) {
                     gif_file->SColorMap,
                     0, 200);
 
-
-
   save_image32_as_ppm(&surface, "output.ppm");
+  // save_image32_as_png(&surface, "output.png");
 
   DGifCloseFile(gif_file, &error);
   
