@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cmath>
 #include <cassert>
 #include <ft2build.h>
 #include <gif_lib.h>
@@ -85,7 +86,10 @@ void fill_image32_with_color(Image32 *image, Pixels32 color)
 }
 
 // * Slap FreeType bitmap onto Image32
-void slap_onto_image32(Image32 *dest, FT_Bitmap *src, int x, int y) {
+void slap_onto_image32(Image32 *dest, FT_Bitmap *src, Pixels32 color, int x, int y) {
+  assert(src->pixel_mode == FT_PIXEL_MODE_GRAY);
+  assert(src->num_grays == 256);
+
   for (int row = 0;
        (row < (int)src->rows) && (row + x < (int)dest->height);
        ++row)
@@ -95,9 +99,12 @@ void slap_onto_image32(Image32 *dest, FT_Bitmap *src, int x, int y) {
          ++col)
     {
       int index = (row + y) * dest->width + col + x;
-      dest->pixels[index].r = src->buffer[row * src->pitch + col];
-      dest->pixels[index].g = src->buffer[row * src->pitch + col];
-      dest->pixels[index].b = src->buffer[row * src->pitch + col];
+      float a = src->buffer[row * src->pitch + col] / 255.0f;
+      // printf("%d %f\n", src->buffer[row * src->pitch + col], a);
+      dest->pixels[index].r = roundf(color.r * a);
+      dest->pixels[index].g = roundf(color.g * a);
+      dest->pixels[index].b = roundf(color.b * a);
+      dest->pixels[index].a = roundf(color.a * a);
     }
   }
 }
@@ -204,6 +211,50 @@ Image32 load_image32_from_png(const char *filepath) {
   return result;
 }
 
+void slap_text_onto_image32(Image32 surface, FT_Face face, const char *text, Pixels32 color, int x, int y) {
+  size_t text_count = strlen(text);
+  int pen_x = x, pen_y = y;
+  FT_GlyphSlot slot = face->glyph; /* a small shortcut */
+
+  for(int i = 0; i < (int) text_count; ++i) {
+
+    // * retrieve glyph index from character code
+    FT_UInt glyph_index = FT_Get_Char_Index(face, (FT_UInt)text[i]);
+
+    // * load glyph image into the slot (erase previous one)
+    auto error = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
+    if (error) {
+      fprintf(stderr, "could not load glyph for %c\n", text[i]);
+      exit(1);
+    }
+
+    // * convert to an anti-aliased bitmap
+    error = FT_Render_Glyph(face->glyph,            /* glyph slot  */
+                            FT_RENDER_MODE_NORMAL); /* render mode */
+    if (error) {
+      fprintf(stderr, "could not render glyph for %c\n", text[i]);
+      exit(1);
+    }
+
+    // * load glyph image into the slot (erase previous one)
+    // error = FT_Load_Char(face, text[i], FT_LOAD_RENDER);
+    // if (error) {
+    //   fprintf(stderr, "Error during rendering character %c\n", text[i]);
+    //   exit(1);
+    // }
+
+    slap_onto_image32(&surface,
+                      &face->glyph->bitmap,
+                      color,
+                      pen_x + slot->bitmap_left,
+                      pen_y - slot->bitmap_top);
+
+    //* increment pen position
+    pen_x += slot->advance.x >> 6;
+
+  }
+}
+
 int main(int argc, char *argv[]) {
   if(argc < 4) {
     fprintf(stderr, "Usage: ./vodus <text> <gif_image> <png_image> [font]\n");
@@ -218,6 +269,7 @@ int main(int argc, char *argv[]) {
     font_face_file_path = argv[4];
   }
 
+  // * Freetype library initialization
   FT_Library  library;   /* handle to library     */
   FT_Face     face;      /* handle to face object */
   auto error = FT_Init_FreeType(&library);
@@ -246,7 +298,6 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "could not set font size in pixels\n");
     exit(1);
   }
-  FT_GlyphSlot slot = face->glyph;  /* a small shortcut */
 
 
   // * Read gif file
@@ -262,48 +313,11 @@ int main(int argc, char *argv[]) {
   surface.height = 600;
   surface.pixels = (Pixels32 *)malloc((unsigned long)surface.width * (unsigned long)surface.height * sizeof(Pixels32));
   assert(surface.pixels);
-  fill_image32_with_color(&surface, {0, 0, 0, 255});
+  fill_image32_with_color(&surface, {0, 0, 0, 0});
 
-      size_t text_count = strlen(text);
-
-  int pen_x = 0, pen_y = 50;
-  for(int i = 0; i < (int) text_count; ++i) {
-
-    // * retrieve glyph index from character code
-    FT_UInt glyph_index = FT_Get_Char_Index(face, (FT_UInt)text[i]);
-
-    // * load glyph image into the slot (erase previous one)
-    error = FT_Load_Glyph(face, glyph_index, FT_LOAD_DEFAULT);
-    if (error) {
-      fprintf(stderr, "could not load glyph for %c\n", text[i]);
-      exit(1);
-    }
-
-    // * convert to an anti-aliased bitmap
-    error = FT_Render_Glyph(face->glyph,            /* glyph slot  */
-                            FT_RENDER_MODE_NORMAL); /* render mode */
-    if (error) {
-      fprintf(stderr, "could not render glyph for %c\n", text[i]);
-      exit(1);
-    }
-
-    // * load glyph image into the slot (erase previous one)
-    // error = FT_Load_Char(face, text[i], FT_LOAD_RENDER);
-    // if (error) {
-    //   fprintf(stderr, "Error during rendering character %c\n", text[i]);
-    //   exit(1);
-    // }
-
-    slap_onto_image32(&surface,
-                      &face->glyph->bitmap,
-                      pen_x + slot->bitmap_left,
-                      pen_y - slot->bitmap_top);
-
-    //* increment pen position
-    pen_x += slot->advance.x >> 6;
-
-  }
-
+  // * Slap the text onto image32
+  Pixels32 color = {55, 20, 60, 255};
+  slap_text_onto_image32(surface, face, text, color, 0, 50);
 
   Image32 image32_png = load_image32_from_png(png_filepath);
   slap_onto_image32(&surface,
