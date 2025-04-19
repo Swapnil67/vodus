@@ -69,15 +69,13 @@ int save_image32_as_ppm(Image32 *image, const char* filename) {
 
 // * Slap image32 onto Image32
 void slap_onto_image32(Image32 *dest, Image32 *src, int x, int y) {
-  for (int row = 0;
-       (row < (int)src->height) && (row + x < (int)dest->height);
-       ++row)
-  {
-    for (int col = 0;
-         (col < (int)src->width) && (col + y < (int)dest->width);
-         ++col)
-    {
-      dest->pixels[(row + y) * dest->width + col + x] = src->pixels[row * src->width + col];
+  for (int row = 0; (row < (int)src->height); ++row) {
+    if ((row + x < (int)dest->height)) {
+      for (int col = 0; (col < (int)src->width); ++col) {
+        if((col + y < (int)dest->width)) {
+          dest->pixels[(row + y) * dest->width + col + x] = src->pixels[row * src->width + col];
+        }
+      }
     }
   }
 }
@@ -95,25 +93,19 @@ void slap_onto_image32(Image32 *dest, FT_Bitmap *src, Pixels32 color, int x, int
   assert(src->pixel_mode == FT_PIXEL_MODE_GRAY);
   assert(src->num_grays == 256);
 
-  for (int row = 0;
-       (row < (int)src->rows) && (row + x < (int)dest->height);
-       ++row) {
-    for (int col = 0;
-         (col < (int)src->width) && (col + y < (int)dest->width);
-         ++col) {
-      int index = (row + y) * dest->width + col + x;
-      float a = src->buffer[row * src->pitch + col] / 255.0f;
-
-      // printf("%d %f\n", src->buffer[row * src->pitch + col], a);
-      // dest->pixels[index].r = color.r * a;
-      // dest->pixels[index].g = color.g * a;
-      // dest->pixels[index].b = color.b * a;
-      // dest->pixels[index].a = color.a * a;
-
-      dest->pixels[index].r = color.r * a + (1.0f - a) * dest->pixels[index].r;
-      dest->pixels[index].g = color.g * a + (1.0f - a) * dest->pixels[index].g;
-      dest->pixels[index].b = color.b * a + (1.0f - a) * dest->pixels[index].b;
-      dest->pixels[index].a = color.a * a + (1.0f - a) * dest->pixels[index].a;
+  for (int row = 0; (row < (int)src->rows); ++row) {
+    if((row + x < (int)dest->height)) {
+      for (int col = 0; (col < (int)src->width); ++col) {
+        if ((col + y < (int)dest->width)) {
+          int index = (row + y) * dest->width + col + x;
+          float a = src->buffer[row * src->pitch + col] / 255.0f;
+    
+          dest->pixels[index].r = color.r * a + (1.0f - a) * dest->pixels[index].r;
+          dest->pixels[index].g = color.g * a + (1.0f - a) * dest->pixels[index].g;
+          dest->pixels[index].b = color.b * a + (1.0f - a) * dest->pixels[index].b;
+          dest->pixels[index].a = color.a * a + (1.0f - a) * dest->pixels[index].a;
+        }
+      }
     }
   }
 }
@@ -127,19 +119,17 @@ void slap_onto_image32(Image32 *dest, SavedImage *src, ColorMapObject *SColorMap
   assert(src->ImageDesc.Top == 0);
   assert(src->ImageDesc.Left == 0);
 
-  for (int row = 0;
-       (row < (int)src->ImageDesc.Height) && (row + x < (int)dest->height);
-       ++row)
-  {
-    for (int col = 0;
-         (col < (int)src->ImageDesc.Width) && (col + y < (int)dest->width);
-         ++col)
-    {
-      GifColorType pixel = SColorMap->Colors[src->RasterBits[row * src->ImageDesc.Width + col]];
-      int dest_index = (row + y) * dest->width + col + x;
-      dest->pixels[dest_index].r = pixel.Red;
-      dest->pixels[dest_index].g = pixel.Green;
-      dest->pixels[dest_index].b = pixel.Blue;
+  for (int row = 0; (row < (int)src->ImageDesc.Height); ++row) {
+    if ((row + x < (int)dest->height)) {
+      for (int col = 0; (col < (int)src->ImageDesc.Width); ++col) {
+        if ((col + y < (int)dest->width)) {
+          GifColorType pixel = SColorMap->Colors[src->RasterBits[row * src->ImageDesc.Width + col]];
+          int dest_index = (row + y) * dest->width + col + x;
+          dest->pixels[dest_index].r = pixel.Red;
+          dest->pixels[dest_index].g = pixel.Green;
+          dest->pixels[dest_index].b = pixel.Blue;
+        }
+      }
     }
   }
 }
