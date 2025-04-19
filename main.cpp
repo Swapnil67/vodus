@@ -203,7 +203,7 @@ Image32 load_image32_from_png(const char *filepath) {
   png_int_32 row_stride = 0;
   png_image_finish_read(&png, NULL, buffer, row_stride, NULL);
 
-  free(buffer);
+  // free(buffer);
   png_image_free(&png);
 
   Image32 result = {
@@ -319,9 +319,11 @@ int main(int argc, char *argv[]) {
   float text_x = 0.0f;
   float text_y = VODUS_HEIGHT;
 
-  #define GIF_DURATION 2.0f
+  #define GIF_DURATION 1.0f
   float gif_dt = GIF_DURATION / gif_file->ImageCount;
   float t = 0.0f;
+
+  Image32 image32_png = load_image32_from_png(png_filepath);
 
   char filename[256];
   for (size_t i = 0; text_y > 0.0f; ++i) {
@@ -333,17 +335,16 @@ int main(int argc, char *argv[]) {
     slap_text_onto_image32(surface, face, text, color, (int)text_x, (int)text_y);
 
 
-    int gif_index = ((int)(t / gif_dt) % gif_file->ImageCount);
-    assert(gif_file->ImageCount > 0);
-    slap_onto_image32(&surface,
-                      &gif_file->SavedImages[gif_index],
-                      gif_file->SColorMap,
-                      (int)text_x, (int)text_y);
-
-    // Image32 image32_png = load_image32_from_png(png_filepath);
+    // int gif_index = ((int)(t / gif_dt) % gif_file->ImageCount);
+    // assert(gif_file->ImageCount > 0);
     // slap_onto_image32(&surface,
-    //                   &image32_png,
+    //                   &gif_file->SavedImages[gif_index],
+    //                   gif_file->SColorMap,
     //                   (int)text_x, (int)text_y);
+
+    slap_onto_image32(&surface,
+                      &image32_png,
+                      (int)text_x, (int)text_y);
 
     // * get text_y position
     text_y -= (VODUS_HEIGHT / VODUS_DURATION) * VODUS_DELTA_TIME;
