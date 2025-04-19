@@ -7,6 +7,11 @@
 #include FT_FREETYPE_H
 
 #define FACE_FILE_PATH "./Comic-Sans-MS.ttf"
+#define VODUS_WIDTH 690
+#define VODUS_HEIGHT 420
+#define VODUS_DURATION 3.0f
+#define VODUS_FPS 100
+#define VODUS_DELTA_TIME (1.0f / VODUS_FPS)
 
 struct Pixels32 {
   uint8_t r, g, b, a;
@@ -92,19 +97,23 @@ void slap_onto_image32(Image32 *dest, FT_Bitmap *src, Pixels32 color, int x, int
 
   for (int row = 0;
        (row < (int)src->rows) && (row + x < (int)dest->height);
-       ++row)
-  {
+       ++row) {
     for (int col = 0;
          (col < (int)src->width) && (col + y < (int)dest->width);
-         ++col)
-    {
+         ++col) {
       int index = (row + y) * dest->width + col + x;
       float a = src->buffer[row * src->pitch + col] / 255.0f;
+
       // printf("%d %f\n", src->buffer[row * src->pitch + col], a);
-      dest->pixels[index].r = roundf(color.r * a);
-      dest->pixels[index].g = roundf(color.g * a);
-      dest->pixels[index].b = roundf(color.b * a);
-      dest->pixels[index].a = roundf(color.a * a);
+      // dest->pixels[index].r = color.r * a;
+      // dest->pixels[index].g = color.g * a;
+      // dest->pixels[index].b = color.b * a;
+      // dest->pixels[index].a = color.a * a;
+
+      dest->pixels[index].r = color.r * a + (1.0f - a) * dest->pixels[index].r;
+      dest->pixels[index].g = color.g * a + (1.0f - a) * dest->pixels[index].g;
+      dest->pixels[index].b = color.b * a + (1.0f - a) * dest->pixels[index].b;
+      dest->pixels[index].a = color.a * a + (1.0f - a) * dest->pixels[index].a;
     }
   }
 }
@@ -119,15 +128,18 @@ void slap_onto_image32(Image32 *dest, SavedImage *src, ColorMapObject *SColorMap
   assert(src->ImageDesc.Left == 0);
 
   for (int row = 0;
-    (row < (int)src->ImageDesc.Height) && (row + x < (int)dest->height);
-    ++row) {
+       (row < (int)src->ImageDesc.Height) && (row + x < (int)dest->height);
+       ++row)
+  {
     for (int col = 0;
-          (col < (int)src->ImageDesc.Width) && (col + y < (int)dest->width);
-          ++col) {
+         (col < (int)src->ImageDesc.Width) && (col + y < (int)dest->width);
+         ++col)
+    {
       GifColorType pixel = SColorMap->Colors[src->RasterBits[row * src->ImageDesc.Width + col]];
-      dest->pixels[(row + y) * dest->width + col + x].r = pixel.Red;
-      dest->pixels[(row + y) * dest->width + col + x].g = pixel.Green;
-      dest->pixels[(row + y) * dest->width + col + x].b = pixel.Blue;
+      int dest_index = (row + y) * dest->width + col + x;
+      dest->pixels[dest_index].r = pixel.Red;
+      dest->pixels[dest_index].g = pixel.Green;
+      dest->pixels[dest_index].b = pixel.Blue;
     }
   }
 }
@@ -309,31 +321,56 @@ int main(int argc, char *argv[]) {
 
   // * Custom Image32 Surface
   Image32 surface;
-  surface.width = 800;
-  surface.height = 600;
+  surface.width = VODUS_WIDTH;
+  surface.height = VODUS_HEIGHT;
   surface.pixels = (Pixels32 *)malloc((unsigned long)surface.width * (unsigned long)surface.height * sizeof(Pixels32));
   assert(surface.pixels);
-  fill_image32_with_color(&surface, {0, 0, 0, 0});
+  
+  float text_x = 0.0f;
+  float text_y = VODUS_HEIGHT;
 
-  // * Slap the text onto image32
-  Pixels32 color = {55, 20, 60, 255};
-  slap_text_onto_image32(surface, face, text, color, 0, 50);
+  #define GIF_DURATION 2.0f
+  float gif_dt = GIF_DURATION / gif_file->ImageCount;
+  float t = 0.0f;
 
-  Image32 image32_png = load_image32_from_png(png_filepath);
-  slap_onto_image32(&surface,
-                    &image32_png,
-                    0, 100);
+  char filename[256];
+  for (size_t i = 0; text_y > 0.0f; ++i) {
+    // * Clean up the surface
+    fill_image32_with_color(&surface, {50, 50, 50, 255});
 
-  assert(gif_file->ImageCount > 0);
-  slap_onto_image32(&surface,
-                    &gif_file->SavedImages[0],
-                    gif_file->SColorMap,
-                    0, 200);
+    // * Slap the text onto image32
+    Pixels32 color = {255, 0, 0, 255};
+    slap_text_onto_image32(surface, face, text, color, (int)text_x, (int)text_y);
 
-  save_image32_as_ppm(&surface, "output.ppm");
-  // save_image32_as_png(&surface, "output.png");
+
+    int gif_index = ((int)(t / gif_dt) % gif_file->ImageCount);
+    assert(gif_file->ImageCount > 0);
+    slap_onto_image32(&surface,
+                      &gif_file->SavedImages[gif_index],
+                      gif_file->SColorMap,
+                      (int)text_x, (int)text_y);
+
+    // Image32 image32_png = load_image32_from_png(png_filepath);
+    // slap_onto_image32(&surface,
+    //                   &image32_png,
+    //                   (int)text_x, (int)text_y);
+
+    // * get text_y position
+    text_y -= (VODUS_HEIGHT / VODUS_DURATION) * VODUS_DELTA_TIME;
+
+    // * create a filename
+    snprintf(filename, 256, "output/frame-%04zu.png", i);
+    printf("Rendering: %s\n",filename);
+
+    // * Create a png image
+    save_image32_as_png(&surface, filename);
+
+    t += VODUS_DELTA_TIME;
+  }
 
   DGifCloseFile(gif_file, &error);
   
   return 0;
 }
+
+// * ffmpeg -framerate 100 -i 'frame-%04d.png' output.mp4

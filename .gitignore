@@ -7,3 +7,5 @@ Comic-Sans-MS.ttf
 *.ppm
 *.gif
 *.png
+*.mp4
+output/
