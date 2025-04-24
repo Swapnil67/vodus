@@ -13,4 +13,4 @@ output.mp4: vodus
 	rm -rf output/
 	mkdir -p output/
 	./vodus "zoro" cat-swag.gif gasm.png > /dev/null
-	ffmpeg -y -framerate 100 -i 'output/frame-%04d.png' output.mp4
+	ffmpeg -y -framerate 100 -i 'output/frame-%05d.png' output.mp4

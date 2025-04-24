@@ -4,14 +4,32 @@
 #include <ft2build.h>
 #include <gif_lib.h>
 #include <png.h>
+#include <pthread.h>
+#include <atomic>
+
 #include FT_FREETYPE_H
 
 #define FACE_FILE_PATH "./Comic-Sans-MS.ttf"
 #define VODUS_WIDTH 690
 #define VODUS_HEIGHT 420
-#define VODUS_DURATION 3.0f
 #define VODUS_FPS 100
 #define VODUS_DELTA_TIME (1.0f / VODUS_FPS)
+
+template <typename F>
+struct Defer
+{
+  Defer(F f): f(f) {}
+
+  ~Defer() {
+    f();
+  }
+
+  F f;
+};
+
+#define CONCAT0(a, b) a##b
+#define CONCAT(a, b) CONCAT0(a, b)
+#define defer(body) Defer CONCAT(defer, __LINE__)([&]() { body; })
 
 struct Pixels32 {
   uint8_t r, g, b, a;
@@ -213,7 +231,7 @@ Image32 load_image32_from_png(const char *filepath) {
   return result;
 }
 
-void slap_text_onto_image32(Image32 surface, FT_Face face, const char *text, Pixels32 color, int x, int y) {
+void slap_text_onto_image32(Image32 *surface, FT_Face face, const char *text, Pixels32 color, int x, int y) {
   size_t text_count = strlen(text);
   int pen_x = x, pen_y = y;
   FT_GlyphSlot slot = face->glyph; /* a small shortcut */
@@ -245,7 +263,7 @@ void slap_text_onto_image32(Image32 surface, FT_Face face, const char *text, Pix
     //   exit(1);
     // }
 
-    slap_onto_image32(&surface,
+    slap_onto_image32(surface,
                       &face->glyph->bitmap,
                       color,
                       pen_x + slot->bitmap_left,
@@ -254,6 +272,106 @@ void slap_text_onto_image32(Image32 surface, FT_Face face, const char *text, Pix
     //* increment pen position
     pen_x += slot->advance.x >> 6;
 
+  }
+}
+
+// * ###################################################################
+// * pthreads
+// * ###################################################################
+
+// *  0   1   2   3   4
+// * [*] [*] [ ] [ ] [ ]
+// *  ^ = queue_begin = 0
+// *          ^ = queue_size = 2
+// *
+// * next_queue_frame == queue[2]
+
+constexpr size_t VODUS_QUEUE_CAPACITY = 1024;
+Image32 queue[VODUS_QUEUE_CAPACITY];
+size_t queue_begin = 0;
+size_t queue_size = 0;
+
+pthread_mutex_t queue_mutex;
+pthread_t output_thread;
+
+// * Initialize queue with Image32 pixels
+void queue_init(void) {
+  for (int i = 0; i < VODUS_QUEUE_CAPACITY; ++i) {
+    queue[i].height = VODUS_HEIGHT;
+    queue[i].width = VODUS_WIDTH;
+    queue[i].pixels = (Pixels32*) malloc(sizeof(Pixels32) * VODUS_WIDTH * VODUS_HEIGHT);
+    assert(queue[i].pixels);
+  }
+  pthread_mutex_init(&queue_mutex, nullptr);
+}
+
+// * Returns the next available frame fron queue
+Image32 *next_queue_frame(void) {
+  pthread_mutex_lock(&queue_mutex);
+  defer(pthread_mutex_unlock(&queue_mutex));
+
+  if(queue_size >= VODUS_QUEUE_CAPACITY) {
+    return nullptr;
+  }
+
+  return &queue[(queue_begin + queue_size - 1) % VODUS_QUEUE_CAPACITY];
+}
+
+void enqueue(void) {
+  pthread_mutex_lock(&queue_mutex); 
+  defer(pthread_mutex_unlock(&queue_mutex));
+
+  if(queue_size >= VODUS_QUEUE_CAPACITY) {
+    return;
+  }
+  queue_size += 1;
+}
+
+Image32 *last_queue_frame(void) {
+  pthread_mutex_lock(&queue_mutex);
+  defer(pthread_mutex_unlock(&queue_mutex));
+
+  if (queue_size == 0)
+    return nullptr;
+
+  return &queue[queue_begin];
+}
+
+void dequeue(void) {
+  pthread_mutex_lock(&queue_mutex); 
+  defer(pthread_mutex_unlock(&queue_mutex));
+
+  if(queue_size == 0) {
+    return;
+  }
+  queue_size -= 1;
+  queue_begin += 1;
+}
+
+std::atomic<bool> shutthefuckup_thread(false);
+
+void *output_thread_routine(void *) {
+  constexpr size_t FILE_PATH_CAPA = 256;
+  char file_path[FILE_PATH_CAPA];
+  
+  size_t frame_count = 0;
+  for (;;) {
+    // * get the next avilable frame from queue
+    Image32 *frame = last_queue_frame();
+    if (frame == nullptr) {
+      if(shutthefuckup_thread.load()) {
+        return nullptr;
+      }
+      continue;
+    }
+    // * build filepath
+    snprintf(file_path, FILE_PATH_CAPA, "output/frame-%05d.png", frame_count);
+
+    save_image32_as_png(frame, file_path);
+
+    frame_count += 1;
+
+    dequeue(); // * To access the next frame
   }
 }
 
@@ -301,7 +419,6 @@ int main(int argc, char *argv[]) {
     exit(1);
   }
 
-
   // * Read gif file
   GifFileType *gif_file = DGifOpenFileName(gif_filepath, &error);
   if(error > 0) {
@@ -309,55 +426,54 @@ int main(int argc, char *argv[]) {
   }
   DGifSlurp(gif_file);
 
-  // * Custom Image32 Surface
-  Image32 surface;
-  surface.width = VODUS_WIDTH;
-  surface.height = VODUS_HEIGHT;
-  surface.pixels = (Pixels32 *)malloc((unsigned long)surface.width * (unsigned long)surface.height * sizeof(Pixels32));
-  assert(surface.pixels);
-  
   float text_x = 0.0f;
   float text_y = VODUS_HEIGHT;
 
-  #define GIF_DURATION 1.0f
+  constexpr float VODUS_DURATION = 5.0f;
+  constexpr float GIF_DURATION = 2.0f;
   float gif_dt = GIF_DURATION / gif_file->ImageCount;
   float t = 0.0f;
 
   Image32 image32_png = load_image32_from_png(png_filepath);
 
-  char filename[256];
-  for (size_t i = 0; text_y > 0.0f; ++i) {
+  // * Initialize queue with Image32 pixels
+  queue_init();
+
+  pthread_create(&output_thread, nullptr, output_thread_routine, nullptr);
+
+  while (text_y > 0.0f) {
+    Image32 *surface = next_queue_frame();
+    if (surface == nullptr) {
+      continue;
+    }
+
     // * Clean up the surface
-    fill_image32_with_color(&surface, {50, 50, 50, 255});
+    fill_image32_with_color(surface, {50, 50, 50, 255});
 
     // * Slap the text onto image32
     Pixels32 color = {255, 0, 0, 255};
     slap_text_onto_image32(surface, face, text, color, (int)text_x, (int)text_y);
 
-
     // int gif_index = ((int)(t / gif_dt) % gif_file->ImageCount);
     // assert(gif_file->ImageCount > 0);
-    // slap_onto_image32(&surface,
+    // slap_onto_image32(surface,
     //                   &gif_file->SavedImages[gif_index],
     //                   gif_file->SColorMap,
     //                   (int)text_x, (int)text_y);
 
-    slap_onto_image32(&surface,
-                      &image32_png,
-                      (int)text_x, (int)text_y);
+    slap_onto_image32(surface, &image32_png, (int)text_x, (int)text_y);
+    
+    enqueue();
 
     // * get text_y position
     text_y -= (VODUS_HEIGHT / VODUS_DURATION) * VODUS_DELTA_TIME;
 
-    // * create a filename
-    snprintf(filename, 256, "output/frame-%04zu.png", i);
-    printf("Rendering: %s\n",filename);
-
-    // * Create a png image
-    save_image32_as_png(&surface, filename);
-
     t += VODUS_DELTA_TIME;
   }
+  
+  shutthefuckup_thread.store(true);
+  printf("Finished rendering waiting for the output thread.\n");
+  pthread_join(output_thread, nullptr);
 
   DGifCloseFile(gif_file, &error);
   

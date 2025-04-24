@@ -4,8 +4,12 @@ vodus
 .DS_Store
 Comic-Sans-MS.ttf
 
+defer.cpp
+
 *.ppm
 *.gif
 *.png
 *.mp4
+*.txt
 output/
+playground/
