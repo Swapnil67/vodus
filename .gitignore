@@ -2,13 +2,13 @@ vodus
 *.dSYM
 .vscode
 .DS_Store
-Comic-Sans-MS.ttf
+# Comic-Sans-MS.ttf
 
 defer.cpp
 
 *.ppm
-*.gif
-*.png
+# *.gif
+# *.png
 *.mp4
 *.txt
 output/

@@ -7,6 +7,7 @@ $ ### MacOS
 $ brew install freetype
 
 $ ### Debian
+$ sudo apt-get install libpng-dev
 $ sudo apt-get install libfreetype6-dev
 
 $ make
