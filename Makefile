@@ -1,4 +1,4 @@
-PKGS=freetype2 libpng
+PKGS=freetype2 libpng libavcodec libavdevice libavfilter libavutil libavformat
 CXXFLAGS=-Wall -Wextra -Wunused-function -Wconversion -pedantic -ggdb -std=c++20 -I/opt/homebrew/Cellar/giflib/5.2.2/include `pkg-config --cflags $(PKGS)` 
 GIFLIBS=-L/opt/homebrew/Cellar/giflib/5.2.2/lib -lgif
 LIBS=`pkg-config --libs $(PKGS)` $(GIFLIBS) -lm 
@@ -14,4 +14,5 @@ output.mp4: vodus
 	mkdir -p output/
 	./vodus "zoro" cat-swag.gif gasm.png > /dev/null
 	ffmpeg -y -framerate 100 -i 'output/frame-%05d.png' output.mp4
+
 	
