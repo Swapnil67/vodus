@@ -3,8 +3,8 @@ CXXFLAGS=-Wall -Wextra -Wunused-function -Wconversion -pedantic -ggdb -std=c++20
 GIFLIBS=-L/opt/homebrew/Cellar/giflib/5.2.2/lib -lgif
 LIBS=`pkg-config --libs $(PKGS)` $(GIFLIBS) -lm 
 
-vodus: main.cpp
-	g++ $(CXXFLAGS) -o vodus main.cpp $(LIBS)
+vodus: main2.cpp
+	g++ $(CXXFLAGS) -o vodus main2.cpp $(LIBS)
 
 .PHONY: render
 render: output.mp4
